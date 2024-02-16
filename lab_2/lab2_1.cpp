@@ -96,6 +96,8 @@ int main(){
     int *exitcode1;
     int *exitcode2;
 
+    printf("Завершение работы потоков, перед завершением программы\n\n");
+    
     ret_val = pthread_join(threadId_1, (void**)&exitcode1);
     ret_val = pthread_join(threadId_2, (void**)&exitcode2);
 
