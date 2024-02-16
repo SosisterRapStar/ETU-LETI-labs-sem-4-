@@ -8,12 +8,22 @@
 
 static void * threadFunc_1 (void *flag1){
     
+    printf("Поток 1 начал свою работу\n");
     sleep(1);
     int *flag = (int*) flag1;
-    printf("Поток 1 начал свою работу\n");
-    int k = 0;
+    
+    
     while (*flag == 0) {
-        if (k < 10){
+        int k = 0;
+        while (k < 10){
+
+        // использование цикла while так как:
+        // for ведет себя в потоках странно
+        // при перехвате мьютекса он все равно дает другому потоку выполняться
+        // при отсутствии мьютексов выполняется только 1 поток
+        // возможно причины в использовании WSL
+
+
             k++;
             putchar('1');
             fflush(stdout);
@@ -30,10 +40,14 @@ static void * threadFunc_2 (void *flag2){
     printf("Поток 2 начал свою работу\n");
     sleep(1);
     int *flag = (int*) flag2;
-    int k = 0;
+
     while (*flag == 0) {
+
+        int k = 0;
+
         if (k < 10){
             k++;
+
             putchar('2');
             fflush(stdout);
             sleep(1);

@@ -16,57 +16,59 @@ void mutexLockError(int* ret_val);
 void mutexInitError(int* ret_val);
 
 static void * threadFunc_1 (void *flag1){
-    
     int *flag = (int*) flag1;
     printf("Поток 1 начал свою работу\n");
     
     while (*flag == 0) {
         
         mutexPolling(flag, 1);
+
         printf("\nПроцесс 1 захватил мьютекс\n");
+
         int k = 0;
-        for (int i = 0; i < 10; i++){
+        while (k < 10){ 
             k++;
             putchar('1');
             fflush(stdout);
             sleep(1);
         }
+
         ret_val = pthread_mutex_unlock(&mutexId);
         mutexUnlockError(&ret_val);
+
         printf("\nПроцесс 1 освободил мьютекс\n");
-        sleep(1);
-        
 
-        
+        sleep(1);        
     }
-
     pthread_exit((void*)1);
-
 }
 
 static void * threadFunc_2 (void *flag2){
-    printf("Поток 2 начал свою работу\n");
     int *flag = (int*) flag2;
+    printf("Поток 2 начал свою работу\n");
+    
     while (*flag == 0) {
      
         mutexPolling(flag, 2);
+
         printf("\nПроцесс 2 захватил мьютекс\n");
+
         int k = 0;
-        for (int i = 0; i < 10; i++){
+        while (k < 10){
             k++;
             putchar('2');
             fflush(stdout);
             sleep(1);
         }
+
         ret_val = pthread_mutex_unlock(&mutexId);
         mutexUnlockError(&ret_val);
+
         printf("\nПроцесс 2 освободил мьютекс\n");
+
         sleep(1);
-        
     }
-
     pthread_exit((void*)2);
-
 }
 
 void mutexPolling(int* flag, int thread_num){
@@ -75,7 +77,7 @@ void mutexPolling(int* flag, int thread_num){
 	if (rv == 0) {
 		return;
 	}else{
-		printf("Ошибка потока %d %s\n", thread_num, strerror(rv));
+		printf("\nОшибка потока %d %s\n", thread_num, strerror(rv));
 		sleep(1);
     }
     }
@@ -129,11 +131,9 @@ int main(){
     mutexInitError(&ret_val);
 
     // pthread_mutex_lock(&mutexId);
-
-    
-
     ret_val = pthread_create(&threadId_1, NULL, threadFunc_1, &flag1);
     threadCreatorErrorHandler(&ret_val);
+
     ret_val = pthread_create(&threadId_2, NULL, threadFunc_2, &flag2);
     threadCreatorErrorHandler(&ret_val);
     
@@ -161,6 +161,4 @@ int main(){
 
     printf("Программа завершила свою работу\n");
     
-
-
 }  
