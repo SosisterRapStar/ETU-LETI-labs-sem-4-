@@ -3,12 +3,6 @@
 #include <unistd.h>
 #include <cstdio>
 
-void setScheduleParamsError(int* ret_val);
-void mainThreadErrorHandler(int* ret_val);
-void getScheduleParamsError(int* ret_val);
-
-
-
 
 int flag1 = 0;
 int flag2 = 0;
@@ -90,8 +84,7 @@ int main(){
     ret_val = pthread_create(&threadId_2, NULL, threadFunc_2, &flag2);
     threadCreatorErrorHandler(&ret_val);
 
-    
-
+    getchar();
 
     flag1 = 1;
     flag2 = 1;
