@@ -1,12 +1,15 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/wait.h>        
 #include <string.h> 
 #include <sys/stat.h>  
 #include <sys/mman.h>     
+#include <iostream>
+#include <string.h>
 #include <semaphore.h>
 #include <sys/epoll.h>
 #include "pthread.h"
@@ -21,7 +24,7 @@ int flag_for_writer;
 sem_t *sem_writer;
 int descriptor;
 int global_net_error;
-char buff[50] = "MessageFromAnotherGalaxy";
+char buff[100];
 void *addr;
 
 off_t offset = 0; 
@@ -36,8 +39,20 @@ void semPostError(int* ret_val){
 }
 
 void getnetError(int* ret_val){
-    if (*ret_val == -1){
-        perror("\nОшибка получения данных о сети\n");
+    
+     switch(*ret_val){
+        case 0:
+            printf("Получение данных о сети, используя функцию getnet_r\n");
+            break;
+        // case ENOENT:
+        //     perror("В хранилище больше нет записей\n");
+        //     break;
+        case ERANGE:
+            perror("Буффер слишком мал, попробуйте заново, увеличив размер буфера\n");
+            break;
+        default:
+            perror("Возникла ошибка\n");
+            break;
     }
     
 }
@@ -77,22 +92,25 @@ void ftruncError(int *ret_val){
 
 static void * threadWriter (void *flag_writer){
     int *flag = (int*) flag_writer;
-    printf("Поток начал работу\n");
+    printf("Поток читателя начал работу\n");
 
+
+   
     struct netent result_buf;
     struct netent *result;
+    int r = getnetent_r(&result_buf, buff, sizeof(buff), &result, &global_net_error);
+    getnetError(&r);
     
-    while (*flag == 0) {
-        // Не работает нихуя эта хуйня
-        int r = getnetent_r(&result_buf, buff, sizeof(buff), &result, &global_net_error);
-        getnetError(&r);
-    
-        printf("%s\n", buff);
-        putchar('W');
-        fflush(stdout);
 
+    while (*flag == 0) {
+        
+        
+        printf("%s\n", buff);
+        
+        fflush(stdout);
         memcpy(addr, buff, sizeof(buff));
         ret_val = sem_post(sem_writer);
+        
         sleep(1);
     }
 
@@ -105,6 +123,7 @@ int main(){
     
     
     pthread_t threadWriter_ID;
+    printf("Процесс писатель начал работу\n");
 
     descriptor = shm_open("/memname", O_CREAT | O_RDWR, 0666);
     openingSharedError(&descriptor);

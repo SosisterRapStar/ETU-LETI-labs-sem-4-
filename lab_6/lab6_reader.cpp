@@ -2,15 +2,14 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/types.h>
-#include <sys/wait.h>       
+#include <sys/types.h>     
 #include <string.h> 
 #include <sys/stat.h>  
 #include <sys/mman.h>     
 #include <semaphore.h>
-#include <sys/epoll.h>
 #include "pthread.h"
 #include <netdb.h>
+#include <signal.h>
 
 int ret_val;
 int flag_reader;
@@ -19,13 +18,12 @@ int descriptor;
 int global_net_error;
 char buff[50];
 void *addr;
-
 off_t offset = 0; 
 
 #define handle_error(msg) \
            do { perror(msg); exit(EXIT_FAILURE); } while (0)
 
-// объявить локальный адрес;
+
 
 
 
@@ -78,7 +76,7 @@ void ftruncError(int *ret_val){
 
 static void * threadReader (void *flag_reader){
     int *flag = (int*) flag_reader;
-    printf("\nПоток начал свою работу\n");
+    printf("\nПоток читателя начал свою работу\n");
 
     while (*flag == 0) {
         memset(buff, 0, sizeof(buff));
@@ -99,10 +97,26 @@ static void * threadReader (void *flag_reader){
 }
 
 
+void sig_handler(int signo)
+{
+    printf("\nСигнал завершения %d\n", signo);
+
+    flag_reader = 1;
+    sem_close(sem_reader);
+    sem_unlink("/mysem");
+    close(descriptor);
+    
+    munmap(addr, sizeof(buff));
+    exit(0);
+}
+
+
 int main(){
+    signal(SIGINT, sig_handler);
     
     
     pthread_t threadReader_ID;
+    printf("Процесс читатель начал свою работу\n");
 
     descriptor = shm_open("/memname", O_CREAT | O_RDWR, 0666);
     openingSharedError(&descriptor);
