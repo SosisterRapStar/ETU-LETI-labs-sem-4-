@@ -14,6 +14,7 @@
 int ret_val;
 int flag_reader;
 sem_t *sem_reader;
+sem_t *sem_writer;
 int descriptor;
 int global_net_error;
 char buff[50];
@@ -79,16 +80,19 @@ static void * threadReader (void *flag_reader){
     printf("\nПоток читателя начал свою работу\n");
 
     while (*flag == 0) {
-        memset(buff, 0, sizeof(buff));
+
         sem_wait(sem_reader);
+        
+        memset(buff, 0, sizeof(buff));
         memcpy(buff, addr, sizeof(buff));
        
-
         sleep(1);   
 
         printf("%s\n", buff);
         fflush(stdout);
 
+        sem_post(sem_writer);
+        
      
     }
 
@@ -102,8 +106,13 @@ void sig_handler(int signo)
     printf("\nСигнал завершения %d\n", signo);
 
     flag_reader = 1;
+
+    sem_close(sem_writer);
+    sem_unlink("/semwriter");
+
     sem_close(sem_reader);
-    sem_unlink("/mysem");
+    sem_unlink("/semreader");
+
     close(descriptor);
     
     munmap(addr, sizeof(buff));
@@ -129,7 +138,10 @@ int main(){
                handle_error("mmap");
     
 
-    sem_reader = sem_open("/mysem", O_CREAT, 0666, 0);
+    sem_reader = sem_open("/semreader", O_CREAT, 0666, 0);
+    semaphoreOpeningError(sem_reader);
+
+    sem_writer = sem_open("/semwriter", O_CREAT, 0666, 0);
     semaphoreOpeningError(sem_reader);
 
    
@@ -144,8 +156,11 @@ int main(){
     int *exitcode;
     pthread_join(threadReader_ID, (void**)&exitcode);
 
+    sem_close(sem_writer);
+    sem_unlink("/semwriter");
+
     sem_close(sem_reader);
-    sem_unlink("/mysem");
+    sem_unlink("/semreader");
 
     ret_val = close(descriptor);
     closingError(&ret_val);

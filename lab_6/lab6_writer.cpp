@@ -21,7 +21,10 @@
 
 int ret_val;
 int flag_for_writer;
+
 sem_t *sem_writer;
+sem_t *sem_reader;
+
 int descriptor;
 int global_net_error;
 char buff[100];
@@ -29,7 +32,6 @@ void *addr;
 
 off_t offset = 0; 
 
-// объявить локальный адрес;
 
 
 void semPostError(int* ret_val){
@@ -104,14 +106,17 @@ static void * threadWriter (void *flag_writer){
 
     while (*flag == 0) {
         
-        
+       
+
         printf("%s\n", buff);
-        
         fflush(stdout);
         memcpy(addr, buff, sizeof(buff));
-        ret_val = sem_post(sem_writer);
+
         
+        sem_post(sem_reader);
+        sem_wait(sem_writer);
         sleep(1);
+        
     }
 
     pthread_exit((void*)1);
@@ -119,8 +124,27 @@ static void * threadWriter (void *flag_writer){
 }
 
 
-int main(){
+void sig_handler(int signo)
+{
+    printf("\nСигнал завершения %d\n", signo);
+
+    flag_for_writer= 1;
+
+    sem_close(sem_writer);
+    sem_unlink("/semwriter");
+
+    sem_close(sem_reader);
+    sem_unlink("/semreader");
+
+    close(descriptor);
     
+    munmap(addr, sizeof(buff));
+    exit(0);
+}
+
+
+int main(){
+    signal(SIGINT, sig_handler);
     
     pthread_t threadWriter_ID;
     printf("Процесс писатель начал работу\n");
@@ -137,8 +161,11 @@ int main(){
 
 
 
-    sem_writer = sem_open("/mysem", O_CREAT, 0666, 0);
-    semaphoreOpeningError(sem_writer);
+    sem_reader = sem_open("/semreader", O_CREAT, 0666, 0);
+    semaphoreOpeningError(sem_reader);
+
+    sem_writer = sem_open("/semwriter", O_CREAT, 0666, 0);
+    semaphoreOpeningError(sem_reader);
 
     ret_val = pthread_create(&threadWriter_ID, NULL, threadWriter, &flag_for_writer);
     threadCreatorErrorHandler(&ret_val);
@@ -153,7 +180,10 @@ int main(){
 
     
     sem_close(sem_writer);
-    sem_unlink("/mysem");
+    sem_unlink("/semwriter");
+
+    sem_close(sem_reader);
+    sem_unlink("/semreader");
 
     ret_val = close(descriptor);
     closingError(&ret_val);
