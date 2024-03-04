@@ -7,11 +7,11 @@
 #include <sys/wait.h>        
 #include <string.h> 
 #include <sys/stat.h>  
+#include <chrono>
 #include <sys/ipc.h>
 #include <iostream>
 #include <string.h>
 #include <semaphore.h>
-#include <sys/epoll.h>
 #include "pthread.h"
 #include <sys/msg.h>
 #include <netdb.h>
@@ -66,7 +66,6 @@ void closingError(int *ret_val){
 
 
 
-
 static void * threadReader (void *flag_reader){
     TMessage message;
     message.mtype = 1;
@@ -75,13 +74,24 @@ static void * threadReader (void *flag_reader){
     printf("Поток читателя начал работу\n");
     
     int ret;
+
+    time_t rawtime;
+    struct tm * timeinfo;
+    time(&rawtime);
     
     while(*flag == 0){
         
 
         memset(message.buff,0,sizeof(message.buff));
         while(msgrcv(msgid,&message,sizeof(message.buff),message.mtype,IPC_NOWAIT) == -1){
-            sleep(0.1);
+
+
+            auto start = std::chrono::steady_clock::now();
+            // sleep(0.1); время 0 так как функция принимает только unsigned int :(
+            usleep(100000);
+            auto end = std::chrono::steady_clock::now();
+            std::cout << "Время задержки в миллисекундах: "<< std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " µs" << std::endl;
+            
         }
         
             

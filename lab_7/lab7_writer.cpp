@@ -1,13 +1,11 @@
-
-
-
+#include <time.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <sys/types.h>
-#include <sys/wait.h>        
+#include <sys/wait.h>       
 #include <string.h> 
 #include <sys/stat.h>  
 #include <sys/ipc.h>
@@ -84,9 +82,11 @@ static void * threadWriter (void *flag_writer){
     while(*flag == 0){
         
         
-        
         while (msgsnd(msgid, &message, sizeof(message.buff), IPC_NOWAIT) == -1){
-            sleep(0.1);
+            // sleep(0.1); это была ошибка
+            
+            usleep(100000);
+            
         }
         printf("Записано %s\n", message.buff);
         fflush(stdout);
