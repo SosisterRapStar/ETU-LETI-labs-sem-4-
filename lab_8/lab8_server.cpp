@@ -7,13 +7,15 @@
 #include <netdb.h>
 #include <errno.h>
 #include <string>
+#include <fcntl.h>
 #include <vector>
+#include <iostream>
 
 using namespace std;
 
 vector <string> msglist;
-int discriptor_listener;
-int discriptor_worker;
+int descriptor_listener;
+int connected_descriptor;
 int ret_val;
 struct sockaddr_in serverAddr;
 struct sockaddr_in clientAddr;
@@ -26,6 +28,14 @@ pthread_t threadReceiver_Id;
 pthread_t threadSender_Id;
 pthread_t threadConnector_Id;
 
+pthread_mutex_t mutexId;
+
+
+void mutexInitError(int* ret_val){
+    if(*ret_val != 0) {
+                perror("Mutex Init error: "); 
+        }
+}
 
 
 void sockCreateCheck(int *ret_val){
@@ -90,85 +100,107 @@ void getnetError(int* ret_val){
 static void * threadReceiver (void *flag_receiver){
     int *flag = (int*) flag_receiver;
 
-    while(flag == 0){
+    while(*flag == 0){
         char buff[128];
 
-        int recBytes = recv(discriptor_worker, buff, sizeof(buff), 0);
+        int recBytes = recv(connected_descriptor, buff, sizeof(buff), 0);
         if (recBytes == -1){
-            perror("Receive error: ");
-            sleep(1);
+            // perror("Receive error: ");
+            // sleep(1);
         
         }
         else if (recBytes == 0) {
-            //разъединение;
+            shutdown(connected_descriptor ,SHUT_RDWR);
             sleep(1);
         }
         else{
-            // захватить мьютекс
-            shutdown(discriptor_worker ,SHUT_RDWR);
+            pthread_mutex_lock(&mutexId);
+
+            
             string received(buff);
             msglist.push_back(received);
+            cout << "Получено от сервера: " << received << "\n";
+
+            pthread_mutex_unlock(&mutexId);
 
         }
 
-        
+         
     }
+    pthread_exit((void*)3);
 }
 
 
 static void * threadSender (void *flag_sender){
     int *flag = (int*) flag_sender;
 
-    while(flag == 0){
-        // захватить мьютекс
+    char buff[128];
+    struct netent result_buf;
+    struct netent *result;
+    int r = getnetent_r(&result_buf, buff, sizeof(buff), &result, NULL);
+
+    while(*flag == 0){
+        pthread_mutex_lock(&mutexId);
         if (!msglist.empty()){
             string S = msglist.back();
             msglist.pop_back();
-            // освободить мьютекс   
-            char buff[128];
-            struct netent result_buf;
-            struct netent *result;
-            int r = getnetent_r(&result_buf, buff, sizeof(buff), &result, NULL);
-            getnetError(&r);
+            pthread_mutex_unlock(&mutexId);
+            
 
             string buffString(buff);
-            string message = S + "\n" + buffString;
+            string message = S + " " + buffString;
 
-            int bytesSended = send(discriptor_worker, message.c_str(), message.length(), 0);
+            int bytesSended = send(connected_descriptor, message.c_str(), message.length(), 0);
             if (bytesSended == -1){
                 perror("Sending error: ");
             }
             else{
                 printf("\nСообщение отправлено\n");
+                sleep(1);
             }
         }
         else{
-            // освободить мьютекс
+            pthread_mutex_unlock(&mutexId);
             sleep(1);
         }
 
     }
+    pthread_exit((void*)2);
 }
 
 static void * threadConnector (void *flag_connector){
     int *flag = (int*) flag_connector;
+    printf("\nСервер ждет соединения\n");
 
-    clientAddr.sin_family =	AF_INET;
-    clientAddr.sin_port = htons(8000);
-    clientAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
-    unsigned int clientSockLen = sizeof(clientAddr);
+    socklen_t clientAddrSize;
 
-    while(flag == 0){
-        discriptor_worker = accept(discriptor_listener, (struct sockaddr *) &clientAddr, &clientSockLen);
-        if (discriptor_worker != -1){
-            printf("Соединение установлено");
+    while(*flag == 0){
+        connected_descriptor = accept(descriptor_listener, (struct sockaddr *) &clientAddr, &clientAddrSize);
+        if (connected_descriptor != -1){
+            fcntl(connected_descriptor , F_SETFL, O_NONBLOCK);
+            printf("Соединение установлено\n");
             
             ret_val = pthread_create(&threadReceiver_Id, NULL, threadReceiver, &flag_receiver);
             threadCreatorErrorHandler(&ret_val);
 
             ret_val = pthread_create(&threadSender_Id, NULL, threadSender, &flag_sender);
             threadCreatorErrorHandler(&ret_val);
+
+            char client_ip[INET_ADDRSTRLEN];
+            int client_port;
+
+            ret_val = getsockname(connected_descriptor, (struct sockaddr *) &clientAddr, &clientAddrSize);
+            if (ret_val == 0) {
+
+                inet_ntop(AF_INET, &(clientAddr.sin_addr), client_ip, INET_ADDRSTRLEN);
+                client_port = ntohs(clientAddr.sin_port);
+                printf("Адресс подключивсшегося сокета: %s: %d", client_ip, client_port);
+                
+            } else {
+                perror("Getsockname failed");
+            }
+
 
             pthread_exit((void*)1);
         }
@@ -203,9 +235,15 @@ int main(){
         
     // };
 
+    printf("Блять\n");
+
+    pthread_mutex_init(&mutexId, NULL);
+    mutexInitError(&ret_val);
     
-    discriptor_listener = socket(AF_INET, SOCK_STREAM, 0);
-    sockCreateCheck(&discriptor_listener);
+    descriptor_listener = socket(AF_INET, SOCK_STREAM, 0);
+    fcntl(descriptor_listener , F_SETFL, O_NONBLOCK);
+
+    sockCreateCheck(&descriptor_listener);
 
     serverAddr.sin_family =	AF_INET;
     serverAddr.sin_port = htons(7000);
@@ -213,15 +251,18 @@ int main(){
 
 
 
-    ret_val = bind(discriptor_listener, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
+    ret_val = bind(descriptor_listener, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
     bindingCheck(&ret_val);
 
     int optval = 1;
-    ret_val = setsockopt(discriptor_listener, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+    ret_val = setsockopt(descriptor_listener, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
     socketOptionsFuncCheck(&ret_val);
 
-    ret_val = listen(discriptor_listener, 1);
+    ret_val = listen(descriptor_listener, 1);
     listenCheck(&ret_val);
+
+    ret_val = pthread_create(&threadConnector_Id, NULL, threadConnector, &flag_connector);
+    threadCreatorErrorHandler(&ret_val);
 
 
     printf("Нажмите любую кнопку");
@@ -231,12 +272,15 @@ int main(){
     flag_sender = 1;
     flag_connector = 1;
 
+    close(descriptor_listener);
+    close(connected_descriptor);
+    int *exitcode;
 
     
+    pthread_join(threadConnector_Id, (void**)&exitcode);
+    pthread_join(threadReceiver_Id, (void**)&exitcode);
+    pthread_join(threadSender_Id, (void**)&exitcode);
 
-    
-
-    
 
 
 }
